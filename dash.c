@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdbool.h>
 #include "defs.h"
+#include <ctype.h>
+#include <unistd.h>
 
 
 // function declarations
@@ -11,13 +13,26 @@ void executeCmd(char* line);
 bool validateRedirectionCmd(char *line);
 int countChar(char* line, char target);
 struct Tokens_char tokenizeString(char* str, char delimiter[],struct Tokens_char* result);
+void removeNewlines(char* str);
+
+
+char* path; // global path variable, "/bin" is the initial value
+
+// struct defines
 CMD_NODE_STRUCT(char);
 CMD_TOKENS_STRUCT(char);
 
+void overwritePath(struct Node_char* paths, int len);
+
+
 int main (int argc, char* argv[]) {
-   //macro structs
-   
-  if (argc > 2) { 
+   // assigning initial path to the path variable
+   char initialPath[] = "/bin;";
+   path = (char *)malloc(5);
+   path = initialPath;
+
+   // invoke the respective methods based on the count of arguments
+   if (argc > 2) { 
       printf("unsupported invoke\n");
       //TODO
       // call the exit process with state as 1
@@ -33,6 +48,7 @@ int main (int argc, char* argv[]) {
    }
 }
 
+// function to execute interactive mode
 void interactiveMode() {
    char *line = NULL;
    size_t len;
@@ -46,7 +62,7 @@ void interactiveMode() {
          // printf("it is a parallel input\n");
       }
       else {
-         // it is not a parallel command
+         // if it is not a parallel command
          executeCmd(line);
       }
    }
@@ -60,9 +76,48 @@ void executeCmd(char* line) {
       if ( !validateRedirectionCmd(line) ) {
          printf("wrong command\n");
       }
+      else {
+         //TODO
+         // implement redirection command process
+      }
    }
    else {
-      printf("%sit is a normal command\n", line);
+      // printf("%sit is a normal command\n", line);
+      struct Tokens_char* tokens = (struct Tokens_char*)malloc(sizeof(struct Tokens_char));
+      char space_delimiter[] = " ";
+      tokenizeString(line, space_delimiter, tokens);
+      removeNewlines(tokens->token->data);
+      // printf("%s\n", tokens->token->data);
+      // printf("strcmp result is %d\n",strcmp(tokens->token->data, "exit"));
+      if (strcmp(tokens->token->data, "path") == 0) {
+         printf("it is a path command\n");
+         struct Node_char* paths= tokens->token->next;
+         overwritePath(paths, tokens->len);
+         
+      }
+      else if ( strcmp( tokens->token->data, "cd" ) == 0 ) {
+         // printf("it is a cd command\n");
+         if(tokens->len == 2) {
+            removeNewlines(tokens->token->next->data);
+            int out = chdir(tokens->token->next->data);
+            // printf("%d\n", out);
+            if ( out == -1 ) {
+               printf("error while executing cd\n");
+               //TODO
+               // need to display standard error message
+            }
+         }
+         else {
+            printf("args for cd should be exactly one\n");
+            //TODO
+            // need to display standard error message
+         }
+      }
+      else if ( strcmp( tokens->token->data, EXIT ) == 0 ) {
+         printf("it is the exit command\n");
+         exit(0);
+      }
+      free(tokens);
    }
 }
 
@@ -101,9 +156,9 @@ int countChar(char* line, char target) {
    return count;
 }
 
-// common function to tokenize a string
+// common function to tokenize a string w.r.t the delimiters given
 struct Tokens_char tokenizeString(char* str, char delimiter[],struct Tokens_char* result) {
-   
+   // storing the tokens in a linked list data structure
    char* input = (char*)malloc(sizeof(str));
    strcpy(input, str);
    result->cmd = str;
@@ -117,7 +172,33 @@ struct Tokens_char tokenizeString(char* str, char delimiter[],struct Tokens_char
       temp = var;
       result->len++;
    }
+   // freeing the temporary vars
    free(input);
    free(temp);
    return *result;
+}
+
+// function to remove ending new line in a string
+void removeNewlines(char* str) {
+    size_t len = strlen(str);
+    if(str[len-1] == '\n'){
+         str[len-1] = '\0';
+    }
+}
+
+// builtin function to overwrite the path
+void overwritePath(struct Node_char* paths, int len) {
+   path = NULL;
+   for(int i = 0; i < len - 1; i++) {
+      int totalLength = 0;
+      if (path != NULL) {
+         totalLength += strlen(path);
+      }
+      totalLength += strlen(paths->data) + 1;
+      path = (char *)realloc(path, totalLength);
+      removeNewlines(paths->data);
+      strcat(path, paths->data);
+      strcat(path, ";");
+      paths = paths->next;
+   }
 }

@@ -14,3 +14,4 @@ struct Tokens_##T {             \
   struct Node_##T* token;       \
   int len;                      \
 };
+#define EXIT "exit"
