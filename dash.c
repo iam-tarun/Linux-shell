@@ -14,7 +14,7 @@ bool validateRedirectionCmd(char *line);
 int countChar(char* line, char target);
 struct Tokens_char tokenizeString(char* str, char delimiter[],struct Tokens_char* result);
 void removeNewlines(char* str);
-
+void triggerError();
 
 char* path; // global path variable, "/bin" is the initial value
 
@@ -36,6 +36,7 @@ int main (int argc, char* argv[]) {
       printf("unsupported invoke\n");
       //TODO
       // call the exit process with state as 1
+      triggerError();
    }
    else if (argc == 2) {
       printf("batch mode\n");
@@ -43,8 +44,8 @@ int main (int argc, char* argv[]) {
       // call the batch mode
    }
    else {
-   //  printf("interactive mode\n");
-    interactiveMode();
+      // printf("interactive mode\n");
+      interactiveMode();
    }
 }
 
@@ -74,7 +75,8 @@ void executeCmd(char* line) {
    if ( strchr(line, REDIRECTION_DELIMITER) != NULL ) {
       // printf("%sit is a redirection command\n", line);
       if ( !validateRedirectionCmd(line) ) {
-         printf("wrong command\n");
+         // printf("wrong command\n");
+         triggerError();
       }
       else {
          //TODO
@@ -102,19 +104,17 @@ void executeCmd(char* line) {
             int out = chdir(tokens->token->next->data);
             // printf("%d\n", out);
             if ( out == -1 ) {
-               printf("error while executing cd\n");
-               //TODO
-               // need to display standard error message
+               // printf("error while executing cd\n");
+               triggerError();
             }
          }
          else {
-            printf("args for cd should be exactly one\n");
-            //TODO
-            // need to display standard error message
+            // printf("args for cd should be exactly one\n");
+            triggerError();
          }
       }
       else if ( strcmp( tokens->token->data, EXIT ) == 0 ) {
-         printf("it is the exit command\n");
+         // printf("it is the exit command\n");
          exit(0);
       }
       free(tokens);
@@ -201,4 +201,9 @@ void overwritePath(struct Node_char* paths, int len) {
       strcat(path, ";");
       paths = paths->next;
    }
+}
+
+void triggerError() {
+   char error_message[30] = "An error has occurred\n";
+   write(STDERR_FILENO, error_message, strlen(error_message));
 }
