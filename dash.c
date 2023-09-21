@@ -15,6 +15,8 @@ int countChar(char* line, char target);
 struct Tokens_char tokenizeString(char* str, char delimiter[],struct Tokens_char* result);
 void removeNewlines(char* str);
 void triggerError();
+int execChildCmd(struct Tokens_char* cmdTokens);
+void removeLeadingTrailingSpaces(char* str);
 
 char* path; // global path variable, "/bin" is the initial value
 
@@ -23,6 +25,7 @@ CMD_NODE_STRUCT(char);
 CMD_TOKENS_STRUCT(char);
 
 void overwritePath(struct Node_char* paths, int len);
+char** formatArguments(struct Node_char* args, char **argsArray, char* dir);
 
 
 int main (int argc, char* argv[]) {
@@ -47,6 +50,8 @@ int main (int argc, char* argv[]) {
       // printf("interactive mode\n");
       interactiveMode();
    }
+
+
 }
 
 // function to execute interactive mode
@@ -61,6 +66,22 @@ void interactiveMode() {
       if ( strchr(line, PARALLEL_DELIMITER) != NULL ) {
          // found a '&' symbol in the input, so it is a parallel input
          // printf("it is a parallel input\n");
+         struct Tokens_char* tokens = (struct Tokens_char*)malloc(sizeof(struct Tokens_char));
+         char delimiter[] = "&&";
+         tokenizeString(line, delimiter, tokens);
+         int pid = 0;
+         for(int i = 0; i < tokens->len; i++) {
+            pid = fork();
+            if (pid == 0) {
+               executeCmd(tokens->token->data);
+               exit(0);
+            }
+            tokens->token = tokens->token->next;
+         }
+         for (int i = 0; i < tokens->len; i++) {
+            int status;
+            wait(&status);
+         }
       }
       else {
          // if it is not a parallel command
@@ -91,6 +112,7 @@ void executeCmd(char* line) {
       removeNewlines(tokens->token->data);
       // printf("%s\n", tokens->token->data);
       // printf("strcmp result is %d\n",strcmp(tokens->token->data, "exit"));
+      // check if it belongs to any of the built in command;
       if (strcmp(tokens->token->data, "path") == 0) {
          printf("it is a path command\n");
          struct Node_char* paths= tokens->token->next;
@@ -117,6 +139,11 @@ void executeCmd(char* line) {
          // printf("it is the exit command\n");
          exit(0);
       }
+      // if it is not a built in command, try to execute it directly using a child process
+      else {
+         execChildCmd(tokens);
+      }
+
       free(tokens);
    }
 }
@@ -165,9 +192,11 @@ struct Tokens_char tokenizeString(char* str, char delimiter[],struct Tokens_char
    struct Node_char* temp = (struct Node_char*)malloc(sizeof(struct Node_char));
    result->token = temp;
    temp->data = strtok(str, delimiter);
+   // removeNewlines(temp->data);
    while(temp->data != NULL) {
       struct Node_char* var = (struct Node_char*)malloc(sizeof(struct Node_char));
       var->data = strtok(NULL, delimiter);
+      // removeNewlines(var->data);
       temp->next = var;
       temp = var;
       result->len++;
@@ -203,7 +232,125 @@ void overwritePath(struct Node_char* paths, int len) {
    }
 }
 
+// standard error message
 void triggerError() {
    char error_message[30] = "An error has occurred\n";
    write(STDERR_FILENO, error_message, strlen(error_message));
+}
+
+// function to execute a child process using fork, access and execv
+int execChildCmd(struct Tokens_char* cmdTokens) {
+   char* dir = NULL;
+   dir = (char *)malloc(strlen(cmdTokens->token->data) + 1);
+   dir = cmdTokens->token->data;
+   // printf("%s\n", dir);
+   // printf("%d\n",access(dir, X_OK));
+   if(access(dir, X_OK) != 0) {
+      // check all the paths
+      char* fDir = (char *)malloc(strlen(dir) + 1);
+      strcpy(fDir, dir);
+      struct Tokens_char* tokens = (struct Tokens_char*)malloc(sizeof(struct Tokens_char));
+      char delimiters[] = ";";
+      char* pathTemp = strdup(path);
+      tokenizeString(pathTemp, delimiters, tokens);
+      struct Node_char* paths = (struct Node_char*)malloc(sizeof(struct Node_char));
+      paths = tokens->token;
+      for ( int i = 0; i < tokens->len; i++ ){
+         int totalLength = strlen(fDir);
+         totalLength += strlen(paths->data) + 2;
+         dir = NULL;
+         dir = (char *)realloc(dir, totalLength);
+         strcat(dir, paths->data);
+         strcat(dir, "/");
+         strcat(dir, fDir);
+         if (access(dir, X_OK) == 0) {
+            // found the dir
+            break;
+         }
+         paths = paths->next;
+      } 
+
+   }
+   if(access(dir, X_OK) == 0) {
+      // printf("%s\n", dir);
+      char** argsArray;
+      argsArray = formatArguments(cmdTokens->token->next, argsArray, dir);
+      // execute the command in a child process
+      int pid = fork();
+      if (pid == 0) {
+         // child process
+         if(argsArray[0] == NULL) {
+            printf("true\n");
+         }
+         execv(dir, argsArray);
+      }
+      else {
+         // parent process waits till the child process finishes
+         int status;
+         wait(&status);
+      }
+   }
+   else {
+      triggerError();
+   }//190290
+   // 7X4BMFXC
+   return 0;
+}
+
+// function to format the arguments
+char** formatArguments(struct Node_char* args, char **argsArray, char* dir) {
+   char* dirCopy = strdup(dir);
+   char delimiters[] = "/";
+   struct Tokens_char* subtokens = (struct Tokens_char*)malloc(sizeof(struct Tokens_char));
+   tokenizeString(dirCopy, delimiters, subtokens);
+   struct Node_char* token_node = (struct Node_char*)malloc(sizeof(struct Node_char));
+   token_node = subtokens->token;
+   printf("%d\n", subtokens->len);
+   int p = 0;
+   for(; p < subtokens->len - 1; p++) {
+      token_node = token_node->next;
+   }
+   int nOfArgs = 2;
+   struct Node_char* current = args;
+   while ((current->data != NULL) && (current->data != NULL) ) {
+      nOfArgs++;
+      current = current->next;
+   }
+   printf("number of args are %d\n", nOfArgs);
+   argsArray = (char **)malloc(nOfArgs * sizeof(char *));
+   current = args;
+   printf("program name is %s\n", token_node->data);
+   argsArray[0] = token_node->data;
+   int i = 1;
+   for ( ; i < nOfArgs-1; i++ ) {
+      removeLeadingTrailingSpaces(current->data);
+      if ( current->data != NULL ) {
+         argsArray[i] = strdup(current->data);
+         printf("%s\n", argsArray[i]);
+      }
+      current = current->next;
+   }
+   argsArray[nOfArgs-1] = NULL;
+   return argsArray;
+}
+
+// function to remove leading and trailing spaces in a string
+void removeLeadingTrailingSpaces(char* str) {
+    int len = strlen(str);
+    // Remove leading spaces
+    int start = 0;
+    while (isspace(str[start])) {
+        start++;
+    }
+    // Remove trailing spaces
+    int end = len - 1;
+    while (end >= 0 && isspace(str[end])) {
+        end--;
+    }
+    // Shift the non-space characters to the beginning of the string
+    for (int i = start; i <= end; i++) {
+        str[i - start] = str[i];
+    }
+    // Null-terminate the modified string
+    str[end - start + 1] = '\0';
 }
