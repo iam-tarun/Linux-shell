@@ -27,7 +27,7 @@ CMD_TOKENS_STRUCT(char);
 void overwritePath(struct Node_char* paths, int len);
 char** formatArguments(struct Node_char* args, char **argsArray, char* dir);
 void executeRedirectCmd(struct Tokens_char* tokens);
-
+void batchMode(char* fileName);
 
 int main (int argc, char* argv[]) {
    // assigning initial path to the path variable
@@ -38,7 +38,6 @@ int main (int argc, char* argv[]) {
    // invoke the respective methods based on the count of arguments
    if (argc > 2) { 
       printf("unsupported invoke\n");
-      //TODO
       // call the exit process with state as 1
       triggerError();
    }
@@ -46,6 +45,7 @@ int main (int argc, char* argv[]) {
       printf("batch mode\n");
       //TODO
       // call the batch mode
+      batchMode(argv[1]);
    }
    else {
       // printf("interactive mode\n");
@@ -376,4 +376,42 @@ void executeRedirectCmd(struct Tokens_char* tokens) {
       freopen("/dev/tty", "w", stdout);
       free(subTokens);
    }
+}
+
+void batchMode(char* fileName) {
+   FILE* file = fopen(fileName, "r");
+   if(file == NULL) {
+      triggerError();
+   }
+   else {
+      char* line = NULL;
+      size_t len = 0;
+      while(getline(&line, &len, file) != -1 ) {
+         if ( strchr(line, PARALLEL_DELIMITER) != NULL ) {
+         // found a '&' symbol in the input, so it is a parallel input
+         // printf("it is a parallel input\n");
+         struct Tokens_char* tokens = (struct Tokens_char*)malloc(sizeof(struct Tokens_char));
+         char delimiter[] = "&&";
+         tokenizeString(line, delimiter, tokens);
+         int pid = 0;
+         for(int i = 0; i < tokens->len; i++) {
+            pid = fork();
+            if (pid == 0) {
+               executeCmd(tokens->token->data);
+               exit(0);
+            }
+            tokens->token = tokens->token->next;
+         }
+         for (int i = 0; i < tokens->len; i++) {
+            int status;
+            wait(&status);
+         }
+         free(tokens);
+      }
+      else {
+         // if it is not a parallel command
+         executeCmd(line);
+      }
+      }
+   } 
 }

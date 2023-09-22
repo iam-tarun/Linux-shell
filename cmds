@@ -1,0 +1,6 @@
+ls
+pwd
+ps
+ls -a
+echo tarun
+echo testing the program > testing
