@@ -26,6 +26,7 @@ CMD_TOKENS_STRUCT(char);
 
 void overwritePath(struct Node_char* paths, int len);
 char** formatArguments(struct Node_char* args, char **argsArray, char* dir);
+void executeRedirectCmd(struct Tokens_char* tokens);
 
 
 int main (int argc, char* argv[]) {
@@ -82,6 +83,7 @@ void interactiveMode() {
             int status;
             wait(&status);
          }
+         free(tokens);
       }
       else {
          // if it is not a parallel command
@@ -93,6 +95,7 @@ void interactiveMode() {
 // function to execute any given command
 void executeCmd(char* line) {
    // check if it is a redirection command
+   char* input = strdup(line);
    if ( strchr(line, REDIRECTION_DELIMITER) != NULL ) {
       // printf("%sit is a redirection command\n", line);
       if ( !validateRedirectionCmd(line) ) {
@@ -100,24 +103,27 @@ void executeCmd(char* line) {
          triggerError();
       }
       else {
-         //TODO
-         // implement redirection command process
+         //redirection command process
+         struct Tokens_char* tokens = (struct Tokens_char*)malloc(sizeof(struct Tokens_char));
+         char redirection_delimiter[] = ">";
+         tokenizeString(input, redirection_delimiter, tokens);
+         executeRedirectCmd(tokens);
+         free(tokens);
       }
    }
    else {
       // printf("%sit is a normal command\n", line);
       struct Tokens_char* tokens = (struct Tokens_char*)malloc(sizeof(struct Tokens_char));
       char space_delimiter[] = " ";
-      tokenizeString(line, space_delimiter, tokens);
+      tokenizeString(input, space_delimiter, tokens);
       removeNewlines(tokens->token->data);
       // printf("%s\n", tokens->token->data);
       // printf("strcmp result is %d\n",strcmp(tokens->token->data, "exit"));
       // check if it belongs to any of the built in command;
       if (strcmp(tokens->token->data, "path") == 0) {
-         printf("it is a path command\n");
+         // printf("it is a path command\n");
          struct Node_char* paths= tokens->token->next;
          overwritePath(paths, tokens->len);
-         
       }
       else if ( strcmp( tokens->token->data, "cd" ) == 0 ) {
          // printf("it is a cd command\n");
@@ -278,10 +284,6 @@ int execChildCmd(struct Tokens_char* cmdTokens) {
       // execute the command in a child process
       int pid = fork();
       if (pid == 0) {
-         // child process
-         if(argsArray[0] == NULL) {
-            printf("true\n");
-         }
          execv(dir, argsArray);
       }
       else {
@@ -305,7 +307,7 @@ char** formatArguments(struct Node_char* args, char **argsArray, char* dir) {
    tokenizeString(dirCopy, delimiters, subtokens);
    struct Node_char* token_node = (struct Node_char*)malloc(sizeof(struct Node_char));
    token_node = subtokens->token;
-   printf("%d\n", subtokens->len);
+   // printf("%d\n", subtokens->len);
    int p = 0;
    for(; p < subtokens->len - 1; p++) {
       token_node = token_node->next;
@@ -316,21 +318,23 @@ char** formatArguments(struct Node_char* args, char **argsArray, char* dir) {
       nOfArgs++;
       current = current->next;
    }
-   printf("number of args are %d\n", nOfArgs);
+   // printf("number of args are %d\n", nOfArgs);
    argsArray = (char **)malloc(nOfArgs * sizeof(char *));
    current = args;
-   printf("program name is %s\n", token_node->data);
+   // printf("program name is %s\n", token_node->data);
    argsArray[0] = token_node->data;
    int i = 1;
    for ( ; i < nOfArgs-1; i++ ) {
       removeLeadingTrailingSpaces(current->data);
       if ( current->data != NULL ) {
          argsArray[i] = strdup(current->data);
-         printf("%s\n", argsArray[i]);
+         // printf("%s\n", argsArray[i]);
       }
       current = current->next;
    }
    argsArray[nOfArgs-1] = NULL;
+   free(subtokens);
+   free(token_node);
    return argsArray;
 }
 
@@ -353,4 +357,23 @@ void removeLeadingTrailingSpaces(char* str) {
     }
     // Null-terminate the modified string
     str[end - start + 1] = '\0';
+}
+
+// function to redirect the output to a file
+void executeRedirectCmd(struct Tokens_char* tokens) {
+   char* fileName = tokens->token->next->data;
+   FILE* file = fopen(fileName, "w");
+   if(file == NULL) {
+      triggerError();
+   }
+   else {
+      freopen(fileName, "w", stdout);
+      struct Tokens_char* subTokens = (struct Tokens_char*)malloc(sizeof(struct Tokens_char));
+      char delimiter[] = " ";
+      tokenizeString(tokens->token->data, delimiter, subTokens);
+      execChildCmd(subTokens);
+      fclose(file);
+      freopen("/dev/tty", "w", stdout);
+      free(subTokens);
+   }
 }
